@@ -1,0 +1,20 @@
+{
+  "name": "bambushu",
+  "owner": {
+    "name": "Bambushu"
+  },
+  "metadata": {
+    "description": "Bambushu Claude Code plugins",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "codex-mode",
+      "description": "Auto-delegates heavy work to Codex when rate limit exceeds 90%",
+      "version": "1.0.0",
+      "author": {
+        "name": "Bambushu"
+      }
+    }
+  ]
+}

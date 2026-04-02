@@ -1,0 +1,11 @@
+{
+  "name": "codex-mode",
+  "description": "Auto-delegates heavy work to Codex when Claude Code 5-hour rate limit exceeds 90%",
+  "version": "1.0.0",
+  "license": "MIT",
+  "author": {
+    "name": "Bambushu"
+  },
+  "repository": "https://github.com/bambushu/codex-mode",
+  "keywords": ["codex", "rate-limit", "delegation", "automation"]
+}
