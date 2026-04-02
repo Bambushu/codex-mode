@@ -9,10 +9,14 @@ CODEX_MODE_THRESHOLD=90
 CODEX_MODE_FLAG="${HOME}/.claude/codex-mode"
 
 if [ -n "${five_h:-}" ]; then
-  rate_int=$(printf '%.0f' "$five_h")
+  rate_int=${five_h%%.*}       # floor — truncate decimals, no rounding
+  rate_int=${rate_int:-0}
   if [ "$rate_int" -ge "$CODEX_MODE_THRESHOLD" ] 2>/dev/null; then
-    [ ! -f "$CODEX_MODE_FLAG" ] && echo "$rate_int" > "$CODEX_MODE_FLAG"
+    [ ! -f "$CODEX_MODE_FLAG" ] && printf '%s\n' "$rate_int" > "$CODEX_MODE_FLAG"
   else
     [ -f "$CODEX_MODE_FLAG" ] && rm -f "$CODEX_MODE_FLAG"
   fi
+else
+  # No rate data (parse failure / missing payload) — clear stale flag
+  [ -f "$CODEX_MODE_FLAG" ] && rm -f "$CODEX_MODE_FLAG"
 fi

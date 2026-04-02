@@ -58,7 +58,7 @@ It took several iterations to get right:
 3. **Third attempt**: polite suggestions ("please delegate") - Claude ignored them and wrote code anyway
 4. **Final version**: hard constraint language ("MUST NOT write code") - Claude actually follows it
 
-The whole thing is 4 files and about 30 lines of bash.
+The whole thing is 5 files and about 30 lines of bash.
 
 ## How it works
 
@@ -114,12 +114,16 @@ CODEX_MODE_THRESHOLD=90
 CODEX_MODE_FLAG="${HOME}/.claude/codex-mode"
 
 if [ -n "${five_h:-}" ]; then
-  rate_int=$(printf '%.0f' "$five_h")
+  rate_int=${five_h%%.*}       # floor — truncate decimals, no rounding
+  rate_int=${rate_int:-0}
   if [ "$rate_int" -ge "$CODEX_MODE_THRESHOLD" ] 2>/dev/null; then
-    [ ! -f "$CODEX_MODE_FLAG" ] && echo "$rate_int" > "$CODEX_MODE_FLAG"
+    [ ! -f "$CODEX_MODE_FLAG" ] && printf '%s\n' "$rate_int" > "$CODEX_MODE_FLAG"
   else
     [ -f "$CODEX_MODE_FLAG" ] && rm -f "$CODEX_MODE_FLAG"
   fi
+else
+  # No rate data — clear stale flag
+  [ -f "$CODEX_MODE_FLAG" ] && rm -f "$CODEX_MODE_FLAG"
 fi
 ```
 
