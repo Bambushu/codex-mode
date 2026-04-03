@@ -28,10 +28,10 @@ fi
 
 case "$mode" in
   advisory)
-    context="CODEX ADVISORY MODE: The 5-hour rate limit is at ${pct} percent. Codex is available for heavy implementation tasks. You MAY still write code directly for small changes, but SHOULD delegate large implementations, refactors, and multi-file changes to codex:codex-rescue."
+    context="CODEX ADVISORY MODE: The 5-hour rate limit is at ${pct} percent. To conserve tokens: (1) Use model: sonnet for Agent calls on simple tasks (file edits, lookups, drafting, formatting, search). (2) Use codex:codex-rescue for heavy implementation, refactors, and multi-file changes. (3) Keep your own responses short and direct. You MAY still write code directly for small changes under ~10 lines."
     ;;
   heavy_only)
-    context="CODEX DELEGATION MODE: The 5-hour rate limit is at ${pct} percent. You MUST delegate all heavy implementation work (new features, refactors, multi-file changes) to codex:codex-rescue. You MAY still handle small edits (under ~20 lines), file reading, planning, and coordination directly."
+    context="CODEX DELEGATION MODE: The 5-hour rate limit is at ${pct} percent. You MUST conserve tokens aggressively: (1) Use model: sonnet for ALL Agent calls except complex implementation. (2) Delegate all heavy implementation work (new features, refactors, multi-file changes) to codex:codex-rescue. (3) Keep your own output minimal. You MAY still handle small edits (under ~10 lines), file reading, and coordination directly."
     ;;
   full)
     context="CRITICAL SYSTEM CONSTRAINT: CODEX MODE IS ACTIVE. The 5-hour rate limit is at ${pct} percent. You MUST NOT write code, generate implementations, edit files, or run heavy shell commands directly. You MUST delegate ALL implementation work to Codex by using the Agent tool with subagent_type codex:codex-rescue. Your ONLY permitted actions are: reading files, planning, coordinating, and delegating via codex:codex-rescue. This is a hard constraint, not a suggestion. Violation wastes the users remaining tokens."
