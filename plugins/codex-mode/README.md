@@ -55,21 +55,6 @@ Claude:  > codex:codex-rescue(Build Express REST API with JWT auth)
 Claude:  "Done. Here's what was created: ..."
 ```
 
-## The story behind this
-
-This plugin was born out of a real problem. During a long Claude Code session I noticed the statusline showing `5h:98%` and realized I was about to hit the wall. The obvious question: "Can we make Claude hand off to Codex automatically when tokens run low?"
-
-The catch: Claude Code's rate limit data is only exposed through the statusline JSON. Hooks (the mechanism for modifying Claude's behavior) don't have access to it. So we invented the **flag file bridge** - a pattern where the statusline acts as a sensor, writing a flag file that hooks can read.
-
-It took several iterations to get right:
-
-1. **First attempt**: `additionalContext` at the top level - hook fired but Claude ignored it
-2. **Second attempt**: found that `hookSpecificOutput` wrapping is required (discovered by reading superpowers' source code)
-3. **Third attempt**: polite suggestions ("please delegate") - Claude ignored them and wrote code anyway
-4. **Final version**: hard constraint language ("MUST NOT write code") - Claude actually follows it
-
-The whole thing is 5 files and about 30 lines of bash.
-
 ## How it works
 
 ```
@@ -256,6 +241,21 @@ A few discoveries that might be useful if you're building Claude Code plugins:
 3. **`additionalContext` needs `hookSpecificOutput` wrapping** - top-level `additionalContext` in hook output is silently ignored by Claude Code.
 4. **Soft suggestions don't work** - Claude will override polite delegation requests. Use explicit constraint language for behavioral changes.
 5. **The flag file bridge pattern is reusable** - any statusline data can be made available to hooks this way.
+
+## The story behind this
+
+This plugin was born out of a real problem. During a long Claude Code session I noticed the statusline showing `5h:98%` and realized I was about to hit the wall. The obvious question: "Can we make Claude hand off to Codex automatically when tokens run low?"
+
+The catch: Claude Code's rate limit data is only exposed through the statusline JSON. Hooks (the mechanism for modifying Claude's behavior) don't have access to it. So we invented the **flag file bridge** - a pattern where the statusline acts as a sensor, writing a flag file that hooks can read.
+
+It took several iterations to get right:
+
+1. **First attempt**: `additionalContext` at the top level - hook fired but Claude ignored it
+2. **Second attempt**: found that `hookSpecificOutput` wrapping is required (discovered by reading superpowers' source code)
+3. **Third attempt**: polite suggestions ("please delegate") - Claude ignored them and wrote code anyway
+4. **Final version**: hard constraint language ("MUST NOT write code") - Claude actually follows it
+
+The whole thing is 5 files and about 30 lines of bash.
 
 ## Contributing
 
