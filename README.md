@@ -19,7 +19,7 @@
 
 ## The problem
 
-Claude Code's Max plan gives you a 5-hour rolling usage window. Hit the limit mid-task and you're stuck waiting. **codex-mode** solves this by detecting when you're at 90%+ and automatically making Claude delegate heavy work to Codex - which runs on its own token pool. You keep working without interruption.
+Claude Code's Max plan gives you a 5-hour rolling usage window. Hit the limit mid-task and you're stuck waiting. **codex-mode** solves this with graduated delegation: at 70% Claude gets nudged to offload big tasks, at 85% heavy work is enforced through Codex, at 95% everything is delegated. Codex runs on its own token pool, so you keep working without interruption.
 
 ## Quick install
 
@@ -47,8 +47,9 @@ A few discoveries for anyone building Claude Code plugins:
 
 - **Statusline JSON is the richest data source** hooks can't access
 - **Flag file bridge** pattern connects statusline data to hooks via disk
+- **JSON flag with TTL** prevents zombie flags from crashed sessions
+- **Graduated constraint language** matches urgency to usage level
 - **`hookSpecificOutput` wrapping required** for `additionalContext` injection
-- **Hard constraint language needed** - polite suggestions get ignored
 - **`--plugin-dir` doesn't load hooks** - must install via marketplace
 
 Full technical writeup in the [plugin README](plugins/codex-mode/).

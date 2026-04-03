@@ -7,8 +7,8 @@
 
 <p align="center">
   <strong>Auto-delegate to Codex when you're running low on Claude Code tokens.</strong><br>
-  A Claude Code plugin that detects when your 5-hour rate limit exceeds 90% and<br>
-  forces Claude to route all heavy work through Codex rescue agents.
+  A Claude Code plugin with graduated delegation: advisory at 70%, enforced at 85%, full at 95%.<br>
+  Routes heavy work through Codex rescue agents to preserve your remaining tokens.
 </p>
 
 <p align="center">
@@ -21,29 +21,39 @@
 
 ## The problem
 
-Claude Code's Max plan gives you a 5-hour rolling usage window. When you're deep in a session and hit 90%+, you have two bad options: stop working and wait for the window to reset, or keep going and risk hitting the hard limit mid-task.
+Claude Code's Max plan gives you a 5-hour rolling usage window. When you're deep in a session and burning through tokens, you have two bad options: stop working and wait for the window to reset, or keep going and risk hitting the hard limit mid-task.
 
-**codex-mode** adds a third option: Claude automatically shifts into a delegation mode where it plans and coordinates, but routes all heavy code generation to OpenAI's Codex - which runs on its own separate token pool. You keep working without interruption.
+**codex-mode** adds a third option: Claude gradually shifts into delegation mode as usage climbs. At 70% it gets a nudge to offload big tasks. At 85% heavy work is enforced to go through Codex. At 95% everything gets delegated. Codex runs on its own token pool, so you keep working without interruption.
 
 ## What it looks like
 
-**Before codex-mode** (at 95% usage):
+Your statusline shows the current tier:
 ```
-You:     "build me a REST API with auth"
-Claude:  *writes 200 lines of Express code, burns remaining tokens*
-         *hits rate limit mid-response*
+Opus 4.6 │ ██████░░░░ 72% │ 5h:72% │ CDX:adv │ ⎇ main │ my-project
+Opus 4.6 │ ████████░░ 87% │ 5h:87% │ CDX:dlg │ ⎇ main │ my-project
+Opus 4.6 │ █████████░ 96% │ 5h:96% │ CDX:full │ ⎇ main │ my-project
 ```
 
-**With codex-mode** (at 95% usage):
+**At 70% (advisory):** Claude can still write code, but gets nudged to delegate large tasks.
+```
+You:     "refactor the auth module"
+Claude:  "This is a big refactor. Let me delegate to Codex."
+         > codex:codex-rescue(Refactor auth module...)
+```
+
+**At 85% (delegation):** Heavy work must go through Codex. Small edits still allowed.
+```
+You:     "fix this typo on line 42"     → Claude fixes it directly
+You:     "build me a REST API"          → Delegated to Codex
+```
+
+**At 95% (full):** Everything gets delegated. Claude reads, plans, and coordinates only.
 ```
 You:     "build me a REST API with auth"
-Claude:  "Let me delegate this to Codex."
-         > codex:codex-rescue(Build Express REST API with JWT auth)
+Claude:  > codex:codex-rescue(Build Express REST API with JWT auth)
          > Done (1 tool use - 15.2k tokens - 12s)
 Claude:  "Done. Here's what was created: ..."
 ```
-
-Claude can still read files, plan, think, and coordinate. It just can't write code, edit files, or run heavy commands directly. Smart delegation, not a hard stop.
 
 ## The story behind this
 
@@ -63,22 +73,34 @@ The whole thing is 5 files and about 30 lines of bash.
 ## How it works
 
 ```
-  statusline.sh                        hooks system
-  (runs every render)                  (runs on each prompt)
-  ┌──────────────────┐                 ┌──────────────────┐
-  │                  │                 │                  │
-  │  reads JSON from │   flag file    │  UserPromptSubmit│
-  │  Claude Code:    │   ~/.claude/   │  hook checks for │
-  │                  │   codex-mode   │  the flag file   │
-  │  rate_limits.    │ ──────────────>│                  │
-  │  five_hour.      │   written at   │  if found:       │
-  │  used_percentage │   >= 90%       │  injects system  │
-  │                  │   removed at   │  constraint into │
-  │                  │   < 90%        │  Claude's context│
-  └──────────────────┘                 └──────────────────┘
+  statusline.sh                         hooks system
+  (runs every render)                   (runs on each prompt)
+  ┌───────────────────┐                 ┌───────────────────┐
+  │                   │                 │                   │
+  │  reads JSON from  │   JSON flag    │  UserPromptSubmit │
+  │  Claude Code:     │   ~/.claude/   │  hook reads flag  │
+  │                   │   codex-mode   │                   │
+  │  rate_limits.     │ ──────────────>│  validates:       │
+  │  five_hour.       │                │  - staleness TTL  │
+  │  used_percentage  │  {pct, ts,     │  - mode tier      │
+  │                   │   session,     │                   │
+  │  writes flag at   │   mode}        │  injects tier-    │
+  │  >= 70% with tier │                │  specific context │
+  │  clears at < 70%  │                │  into Claude      │
+  └───────────────────┘                 └───────────────────┘
 ```
 
-The statusline is the **only** place Claude Code exposes rate limit data to user scripts. The flag file bridge connects that data to the hook system - a pattern that could be reused for other statusline-driven automations.
+The flag file is a JSON object with four fields:
+```json
+{"pct": 87, "ts": 1743700000, "session": "my-session", "mode": "heavy_only"}
+```
+
+- **pct**: current 5h usage percentage
+- **ts**: Unix timestamp (enables 15-minute staleness TTL)
+- **session**: session name (for future multi-session scoping)
+- **mode**: delegation tier (`advisory`, `heavy_only`, `full`)
+
+The statusline is the **only** place Claude Code exposes rate limit data to user scripts. The flag file bridge connects that data to the hook system. The staleness TTL ensures zombie flags from crashed sessions auto-expire after 15 minutes.
 
 ### Why a flag file?
 
@@ -105,25 +127,28 @@ claude plugin install codex-mode@bambushu
 
 ### 2. Add the statusline snippet
 
-Your statusline script needs to write a flag file when usage is high. If you already parse `five_h` from the statusline JSON, paste this after that line:
+Your statusline script needs to write a JSON flag file when usage is high. If you already parse `five_h` and `session_name` from the statusline JSON, paste this after those lines:
 
 ```bash
-# codex-mode: flag file bridge
-# Writes ~/.claude/codex-mode when 5h usage >= threshold
-CODEX_MODE_THRESHOLD=90
-CODEX_MODE_FLAG="${HOME}/.claude/codex-mode"
+# codex-mode: flag file bridge with graduated tiers
+flag="$HOME/.claude/codex-mode"
 
 if [ -n "${five_h:-}" ]; then
   rate_int=${five_h%%.*}       # floor — truncate decimals, no rounding
   rate_int=${rate_int:-0}
-  if [ "$rate_int" -ge "$CODEX_MODE_THRESHOLD" ] 2>/dev/null; then
-    [ ! -f "$CODEX_MODE_FLAG" ] && printf '%s\n' "$rate_int" > "$CODEX_MODE_FLAG"
+  # Write flag at >= 70% with graduated delegation tiers
+  if [ "$rate_int" -ge 70 ] 2>/dev/null; then
+    mode="advisory"
+    if [ "$rate_int" -ge 95 ] 2>/dev/null; then
+      mode="full"
+    elif [ "$rate_int" -ge 85 ] 2>/dev/null; then
+      mode="heavy_only"
+    fi
+    printf '{"pct":%d,"ts":%d,"session":"%s","mode":"%s"}\n' \
+      "$rate_int" "$(date +%s)" "${session_name:-}" "$mode" > "$flag"
   else
-    [ -f "$CODEX_MODE_FLAG" ] && rm -f "$CODEX_MODE_FLAG"
+    [ -f "$flag" ] && rm -f "$flag"
   fi
-else
-  # No rate data — clear stale flag
-  [ -f "$CODEX_MODE_FLAG" ] && rm -f "$CODEX_MODE_FLAG"
 fi
 ```
 
@@ -133,6 +158,7 @@ If you don't have a statusline script yet, you'll need the basics first:
 #!/bin/bash
 input=$(cat)
 five_h=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty' 2>/dev/null)
+session_name=$(echo "$input" | jq -r '.session_name // empty' 2>/dev/null)
 
 # Paste the codex-mode snippet here
 
@@ -156,25 +182,32 @@ Save as `~/.claude/statusline.sh` and add to your `settings.json`:
 # Check the plugin is installed and enabled
 claude plugin list
 
-# Create a test flag manually
-echo 92 > ~/.claude/codex-mode
+# Create a test flag for each tier
+printf '{"pct":72,"ts":%d,"session":"test","mode":"advisory"}\n' "$(date +%s)" > ~/.claude/codex-mode
+# Start a session - Claude should mention Codex is available but still write code
 
-# Start a new session and ask Claude to write code
-claude
-# > "write me a fizzbuzz in Python"
-# Claude should delegate to codex:codex-rescue instead of writing directly
+printf '{"pct":88,"ts":%d,"session":"test","mode":"heavy_only"}\n' "$(date +%s)" > ~/.claude/codex-mode
+# Claude should delegate big tasks but allow small edits
 
-# Clean up the test flag
+printf '{"pct":97,"ts":%d,"session":"test","mode":"full"}\n' "$(date +%s)" > ~/.claude/codex-mode
+# Claude should delegate everything to codex:codex-rescue
+
+# Verify the hook output directly
+bash "$(claude plugin root codex-mode@bambushu 2>/dev/null || echo plugins/codex-mode)/scripts/codex-mode-check.sh" | jq .
+
+# Clean up
 rm ~/.claude/codex-mode
 ```
 
 ## Customization
 
-| Setting | Where | Default | Notes |
-|---------|-------|---------|-------|
-| Activation threshold | `CODEX_MODE_THRESHOLD` in statusline | `90` | Percentage of 5h limit |
+| Tier | Range | Mode | Behavior |
+|------|-------|------|----------|
+| Advisory | 70-84% | `advisory` | Codex available, Claude can still write code |
+| Delegation | 85-94% | `heavy_only` | Heavy work must go through Codex, small edits OK |
+| Full | 95-100% | `full` | Everything delegated, Claude reads/plans only |
 
-Lower the threshold to start delegating earlier (more conservative with tokens). Raise it to keep Claude working directly as long as possible.
+The thresholds are set in the statusline snippet. Adjust them to match your workflow. Want earlier delegation? Lower the numbers. Prefer to stay hands-on longer? Raise them.
 
 ## Technical details
 
@@ -197,28 +230,11 @@ This is the same mechanism the [superpowers plugin](https://github.com/obra/supe
 
 Early versions used polite suggestions: "Route heavy work to Codex rescue agents." Claude consistently ignored these and wrote code directly, especially when other plugins (like superpowers' brainstorming skill) encouraged engagement.
 
-The final version uses explicit constraint language: "You MUST NOT write code directly. This is a hard constraint, not a suggestion." This consistently triggers delegation behavior.
+v1.0 used a single hard constraint: "You MUST NOT write code directly." v1.1.0 uses tiered language that matches the urgency of the situation: `advisory` uses MAY/SHOULD, `heavy_only` uses MUST for big tasks, and `full` uses MUST NOT for everything. The escalation matches how you'd naturally want to conserve tokens.
 
 ### Plugin vs settings.json
 
-The plugin registers the `UserPromptSubmit` hook automatically. But if you prefer not to install the plugin, you can add the hook directly to your `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -f ~/.claude/codex-mode ]; then printf '{\\n  \"hookSpecificOutput\": {\\n    \"hookEventName\": \"UserPromptSubmit\",\\n    \"additionalContext\": \"CRITICAL SYSTEM CONSTRAINT: CODEX MODE IS ACTIVE. You MUST NOT write code or edit files directly. Delegate ALL implementation to Codex via codex:codex-rescue.\"\\n  }\\n}\\n'; fi"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+The plugin registers the `UserPromptSubmit` hook automatically. The hook script reads the JSON flag, validates staleness, and emits a tier-appropriate context injection. If you prefer not to install the plugin, you can replicate this with a manual hook in `~/.claude/settings.json`, but the plugin handles the JSON parsing and tier logic for you.
 
 ## Files
 
@@ -247,9 +263,10 @@ Found a bug or have an improvement? Open an issue or PR at [github.com/Bambushu/
 
 Ideas for future versions:
 - Configurable delegation target (not just Codex)
-- Gradual throttling (delegate only large tasks at 80%, everything at 95%)
+- Multi-session scoping (session field is already in the flag, needs hook-side filtering)
+- Burn-rate prediction (track usage deltas over time, trigger early if trajectory hits 100%)
+- Prompt-aware task classification (score request complexity to skip delegation overhead on light questions)
 - 7-day rate limit support
-- Visual indicator in statusline when codex-mode is active
 
 ## License
 
