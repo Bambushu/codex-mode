@@ -1,6 +1,6 @@
 {
   "name": "codex-mode",
-  "description": "Auto-delegates heavy work to Codex when Claude Code 5-hour rate limit exceeds 90%",
+  "description": "Graduated Codex delegation for Claude Code: advisory at 70%, enforced at 85%, full at 95%",
   "version": "1.1.0",
   "license": "MIT",
   "author": {
